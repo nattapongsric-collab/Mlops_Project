@@ -1,4 +1,4 @@
-.PHONY: setup sample-data data validate pipeline serve test lint loadtest drift rollback up down
+.PHONY: setup sample-data data split validate pipeline serve test lint loadtest drift rollback up down
 
 setup:
 	python -m venv .venv && . .venv/bin/activate && pip install -r requirements-dev.txt && pip install --no-deps -e .
@@ -8,6 +8,9 @@ sample-data:
 
 data:
 	bash scripts/download_data.sh
+
+split:
+	python -m demand.data.split
 
 validate:
 	python -m demand.data.schema
