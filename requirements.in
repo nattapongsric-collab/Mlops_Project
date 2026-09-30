@@ -1,0 +1,18 @@
+# Top-level deps. Pin exact versions on Day 1:
+#   pip install pip-tools && pip-compile requirements.in -o requirements.txt
+pandas
+numpy
+pyarrow
+scikit-learn
+lightgbm
+shap
+pandera
+mlflow
+prefect
+fastapi
+uvicorn[standard]
+pydantic
+prometheus-fastapi-instrumentator
+evidently
+pyyaml
+httpx

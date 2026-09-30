@@ -1,0 +1,30 @@
+# TODO (C/D): fill in and verify on a blank machine
+services:
+  mlflow:
+    image: ghcr.io/mlflow/mlflow  # TODO: pin tag
+    command: mlflow server --host 0.0.0.0 --port 5000 --backend-store-uri sqlite:///mlflow/mlflow.db --artifacts-destination /mlflow/artifacts
+    ports: ["5000:5000"]
+    volumes: ["./mlflow_data:/mlflow"]
+
+  pipeline:
+    build: { context: ., dockerfile: docker/pipeline.Dockerfile }
+    environment: [MLFLOW_TRACKING_URI=http://mlflow:5000]
+    volumes: ["./data:/app/data"]
+    depends_on: [mlflow]
+    profiles: ["pipeline"]   # run with: docker compose run --rm pipeline
+
+  api:
+    build: { context: ., dockerfile: docker/api.Dockerfile }
+    environment: [MLFLOW_TRACKING_URI=http://mlflow:5000]
+    ports: ["8000:8000"]
+    depends_on: [mlflow]
+
+  prometheus:
+    image: prom/prometheus  # TODO: pin tag
+    volumes: ["./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml"]
+    ports: ["9090:9090"]
+
+  grafana:
+    image: grafana/grafana  # TODO: pin tag
+    ports: ["3000:3000"]
+    volumes: ["./monitoring/grafana:/etc/grafana/provisioning"]

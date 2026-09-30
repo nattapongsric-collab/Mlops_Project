@@ -1,0 +1,16 @@
+__pycache__/
+*.pyc
+.venv/
+.env
+data/raw/*
+data/processed/*
+data/stream/*
+data/predictions/*
+!data/**/.gitkeep
+mlruns/
+mlartifacts/
+artifacts/*
+!artifacts/.gitkeep
+.ipynb_checkpoints/
+.pytest_cache/
+.ruff_cache/

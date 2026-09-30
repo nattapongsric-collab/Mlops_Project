@@ -1,0 +1,47 @@
+project: rossmann-demand
+seed: 42
+
+paths:
+  raw_train: data/raw/train.csv
+  raw_store: data/raw/store.csv
+  processed_dir: data/processed
+  stream_dir: data/stream
+  predictions_dir: data/predictions
+  bad_samples_dir: data/bad_samples
+
+split:            # time-based only — never random
+  train: ["2013-01-01", "2014-12-31"]
+  val:   ["2015-01-01", "2015-04-30"]
+  test:  ["2015-05-01", "2015-05-31"]
+  stream: ["2015-06-01", "2015-07-31"]
+
+features:
+  drop: [Customers]          # leakage — unknown at prediction time
+  lags: [7, 14, 28]
+  rolling_windows: [7, 28]
+  horizon_days: 7
+
+mlflow:
+  tracking_uri: http://mlflow:5000
+  experiment: rossmann-demand
+  model_name: rossmann_demand
+  champion_alias: champion
+  challenger_alias: challenger
+
+gating:
+  min_improvement_vs_naive: 0.10   # WAPE must beat seasonal naive by >= 10%
+  max_abs_bias: 0.05
+  must_not_be_worse_than_champion: true
+  max_model_size_mb: 50
+
+slo:
+  api_p95_ms: 200
+  api_error_rate: 0.005
+  availability: 0.995
+  batch_deadline: "06:00"
+
+monitoring:
+  psi_threshold: 0.2
+  wape_degradation_threshold: 0.15
+  window_days: 7
+  retrain_schedule: weekly
