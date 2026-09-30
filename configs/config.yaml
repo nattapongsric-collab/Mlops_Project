@@ -20,6 +20,15 @@ features:
   lags: [7, 14, 28]
   rolling_windows: [7, 28]
   horizon_days: 7
+  competition_distance_fill: 100000   # stores with no competitor info = "very far away"
+
+models:
+  ridge:
+    alpha: 1.0
+  lightgbm:            # default settings for experiment 3
+    n_estimators: 300
+    learning_rate: 0.05
+    num_leaves: 63
 
 mlflow:
   tracking_uri: http://mlflow:5000
