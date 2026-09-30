@@ -37,13 +37,16 @@ from demand.features.build_features import (
 from demand.features.preprocess import make_model_pipeline
 from demand.training.baselines import seasonal_naive_predict
 from demand.training.evaluate import compute_metrics
-from demand.training.model_wrapper import DemandModel
+from demand.training.model_wrapper import STORE_INFO_COLUMNS, DemandModel
 
 MODEL_NAMES = ["naive", "ridge", "lightgbm"]
 
 # How many days of sales history the served model keeps. It needs at least
 # biggest lag or rolling window (28) + horizon (7) days; 60 gives some room.
 HISTORY_DAYS_FOR_SERVING = 60
+
+# Columns the served model expects for each day (store details are inside the model).
+DAILY_INPUT_COLUMNS = ["Store", "DayOfWeek", "Date", "Open", "Promo", "StateHoliday", "SchoolHoliday"]
 
 
 def get_git_commit() -> str:
@@ -109,6 +112,7 @@ def log_model_package(
     pipeline,
     sales_history: pd.DataFrame,
     store_weekday_mean: pd.DataFrame,
+    store_info: pd.DataFrame,
     config: dict,
     input_example: pd.DataFrame,
 ) -> float:
@@ -119,11 +123,13 @@ def log_model_package(
         pipeline_path = temp_folder / "pipeline.joblib"
         history_path = temp_folder / "sales_history.parquet"
         weekday_mean_path = temp_folder / "store_weekday_mean.parquet"
+        store_info_path = temp_folder / "store_info.parquet"
         config_path = temp_folder / "config.yaml"
 
         joblib.dump(pipeline, pipeline_path)
         sales_history.to_parquet(history_path, index=False)
         store_weekday_mean.to_parquet(weekday_mean_path, index=False)
+        store_info.to_parquet(store_info_path, index=False)
         with open(config_path, "w", encoding="utf-8") as config_file:
             yaml.safe_dump(config, config_file)
 
@@ -136,6 +142,7 @@ def log_model_package(
                 "sklearn_pipeline": str(pipeline_path),
                 "sales_history": str(history_path),
                 "store_weekday_mean": str(weekday_mean_path),
+                "store_info": str(store_info_path),
                 "config": str(config_path),
             },
             code_paths=[str(ROOT / "src" / "demand")],
@@ -217,9 +224,13 @@ def train_and_log(model_name: str, config: dict, processed_folder: Path) -> str:
             recent_history = history_for_test[history_for_test["Date"] > first_history_day]
             recent_history = recent_history[["Store", "Date", "Sales", "Open"]]
 
-            input_example = test_data.drop(columns=["Sales", "Customers"]).head(5)
+            # One row per store with its details from store.csv.
+            store_info = history_for_test.drop_duplicates("Store")[STORE_INFO_COLUMNS]
+
+            # The API sends only daily columns; the model adds store details itself.
+            input_example = test_data[DAILY_INPUT_COLUMNS].head(5)
             model_size_mb = log_model_package(
-                pipeline, recent_history, store_weekday_mean, config, input_example
+                pipeline, recent_history, store_weekday_mean, store_info, config, input_example
             )
             mlflow.log_metric("model_size_mb", model_size_mb)
         # 6: environment
