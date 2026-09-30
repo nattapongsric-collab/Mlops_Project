@@ -14,7 +14,10 @@ Endpoints
   POST /reload      load the current @champion again (after promote or rollback)
   GET  /metrics     numbers for Prometheus
 """
+import tempfile
+import time
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 import mlflow
 import pandas as pd
@@ -36,7 +39,13 @@ model_state = {
     "version": None,
     "run_id": None,
     "load_error": None,
+    "loaded_at": None,  # time.time() of the last load attempt
 }
+
+# With several workers, POST /reload reaches only one of them. That worker
+# touches this file; every other worker sees the newer file time on its next
+# request and loads the champion again too.
+RELOAD_SIGNAL_FILE = Path(tempfile.gettempdir()) / "demand_reload_signal"
 
 PREDICTIONS_TOTAL = Counter(
     "demand_predictions_total",
@@ -49,6 +58,7 @@ def load_champion() -> None:
     """Load models:/<name>@champion from MLflow into model_state. Never raises."""
     model_name = CONFIG["mlflow"]["model_name"]
     alias = CONFIG["mlflow"]["champion_alias"]
+    model_state["loaded_at"] = time.time()
     try:
         mlflow.set_tracking_uri(get_mlflow_tracking_uri(CONFIG))
         version_info = MlflowClient().get_model_version_by_alias(model_name, alias)
@@ -63,6 +73,17 @@ def load_champion() -> None:
         # Keep the old model (if any) so a failed reload does not take the API down.
         model_state["load_error"] = f"{type(error).__name__}: {error}"
         print(f"WARNING: could not load @{alias}: {model_state['load_error']}")
+
+
+def reload_if_another_worker_asked() -> None:
+    """Load the champion again if POST /reload happened in another worker after our last load."""
+    if model_state["loaded_at"] is None:
+        return
+    if not RELOAD_SIGNAL_FILE.exists():
+        return
+    signal_time = RELOAD_SIGNAL_FILE.stat().st_mtime
+    if signal_time > model_state["loaded_at"]:
+        load_champion()
 
 
 @asynccontextmanager
@@ -120,6 +141,7 @@ def check_store_and_date(request: PredictRequest, model) -> None:
 @app.post("/predict", response_model=PredictResponse)
 def predict(request: PredictRequest) -> PredictResponse:
     """Forecast sales for one store on one day, with the 3 features that mattered most."""
+    reload_if_another_worker_asked()
     model = model_state["model"]
 
     if model is not None:
@@ -168,6 +190,7 @@ def predict(request: PredictRequest) -> PredictResponse:
 @app.get("/health")
 def health() -> JSONResponse:
     """200 when a model is loaded and ready, 503 when not (Docker uses this)."""
+    reload_if_another_worker_asked()
     if model_state["model"] is None:
         return JSONResponse(
             status_code=503,
@@ -179,6 +202,7 @@ def health() -> JSONResponse:
 @app.get("/model-info")
 def model_info() -> dict:
     """Which model is serving, and the last day of sales it knows."""
+    reload_if_another_worker_asked()
     model = model_state["model"]
     last_known_day = None
     if model is not None:
@@ -199,4 +223,6 @@ def reload_model() -> dict:
     load_champion()
     if model_state["load_error"] is not None:
         raise HTTPException(status_code=503, detail=f"reload failed: {model_state['load_error']}")
+    # Tell the other workers to reload too.
+    RELOAD_SIGNAL_FILE.touch()
     return model_info()
