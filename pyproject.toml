@@ -1,0 +1,34 @@
+# Project settings.
+# - [project]: lets us run `pip install -e .` so `import demand` works everywhere.
+# - [tool.ruff]: lint rules used by `make lint` and CI.
+# - [tool.pytest.ini_options]: pytest settings used by `make test` and CI.
+# Library versions are NOT listed here; they are pinned in requirements.txt.
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "demand"
+version = "0.1.0"
+description = "Rossmann daily demand forecasting (CP413008 MLOps project)"
+requires-python = ">=3.12,<3.13"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+# E/F = basic errors, I = import order, B = common bugs, UP = modern Python syntax
+select = ["E", "F", "I", "B", "UP"]
+# Long lines are allowed (mostly Thai/English docstrings); try to keep code under 100.
+ignore = ["E501"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# Lets tests import `demand` even without `pip install -e .`
+pythonpath = ["src"]

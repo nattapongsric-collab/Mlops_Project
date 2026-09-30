@@ -20,3 +20,19 @@
 - ยังไม่มี `requirements.txt` / `requirements-dev.txt` (pin เวอร์ชัน) และ `pyproject.toml`
 - ยังไม่มี `tests/fixtures/sample_train.csv` ที่ CI ต้องใช้
 - ขั้นต่อไป (วันที่ 1): ทำระบบให้วิ่งครบเส้นแบบง่ายใน Docker (ข้อมูล → โมเดล → API)
+
+<!-- ccr-projects-attribution -->
+_Requested by **Kim**_
+
+## สรุปการเปลี่ยนแปลง
+ปรับกฎใน CLAUDE.md ตามที่ทีมตกลงกัน 8 ข้อ: เพิ่มกฎกัน leakage (ย้อนอย่างน้อย 7 วัน), การจัดการข้อมูล, Docker/Windows, WAPE และ gating, การดึงประวัติยอดขายตอน serve และ POST /reload, การ approve PR, สไตล์โค้ดแบบ Junior dev และการทำรายงานทุกขั้นตอน พร้อมรายงานใน docs/reports/ และบันทึกใน docs/ai_usage.md
+
+## ส่วนงาน
+- [x] Docs
+
+## เช็กลิสต์
+- [ ] `make lint test` ผ่าน (ไม่มีโค้ดเปลี่ยน)
+- [x] ไม่ได้ใช้ `Customers` เป็นฟีเจอร์ / ไม่ได้แบ่งข้อมูลแบบสุ่ม
+- [x] ถ้าใช้ AI ช่วยเขียน ได้บันทึกใน `docs/ai_usage.md` แล้ว
+
+🤖 Generated with [Claude Code](https://claude.com/claude-code)
