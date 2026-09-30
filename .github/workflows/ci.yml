@@ -11,9 +11,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
-        with: { python-version: "3.11" }
+        with: { python-version: "3.12" }
       - run: pip install -r requirements.txt -r requirements-dev.txt
-      - run: ruff check src tests
+      - run: ruff check src tests scripts
       - run: pytest -q
         env: { PYTHONPATH: src }
 
@@ -22,7 +22,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
-        with: { python-version: "3.11" }
+        with: { python-version: "3.12" }
       - run: pip install -r requirements.txt
       - run: python -m demand.data.schema --sample tests/fixtures/sample_train.csv
         env: { PYTHONPATH: src }
@@ -33,7 +33,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
-        with: { python-version: "3.11" }
+        with: { python-version: "3.12" }
       - run: pip install -r requirements.txt
       - run: python -m demand.training.gating --ci --sample tests/fixtures/sample_train.csv
         env: { PYTHONPATH: src }

@@ -8,6 +8,8 @@ data/stream/*
 data/predictions/*
 !data/**/.gitkeep
 mlruns/
+mlflow_data/
+*.egg-info/
 mlartifacts/
 artifacts/*
 !artifacts/.gitkeep

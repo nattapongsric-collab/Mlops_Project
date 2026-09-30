@@ -1,5 +1,10 @@
-# Top-level deps. Pin exact versions on Day 1:
-#   pip install pip-tools && pip-compile requirements.in -o requirements.txt
+# Top-level deps. The pinned versions live in requirements.txt.
+# After changing this file, re-pin for every OS (Windows/Mac/Linux) with:
+#   pip install uv
+#   uv pip compile requirements.in --universal --python-version 3.12 -o requirements.txt
+#   uv pip compile requirements-dev.in --universal --python-version 3.12 -o requirements-dev.txt
+# We use uv (not pip-compile) because --universal keeps OS-specific packages
+# (e.g. pywin32 only on Windows), so one file works for the whole team.
 pandas
 numpy
 pyarrow

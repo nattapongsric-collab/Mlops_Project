@@ -26,6 +26,11 @@
 7. **ห้าม commit ตรงเข้า `main`** ทุกงานทำใน branch แล้วเปิด Pull Request (อาจารย์ดูประวัติ commit รายคน)
 8. ข้อมูลเสียต้องทำให้ pipeline **หยุดและแจ้งเตือน** ห้ามกลืน error เงียบๆ
 9. API ต้อง**ไม่ล่ม**กับ input แปลกๆ ต้องตอบ 422 พร้อมข้อความที่อ่านเข้าใจ
+10. **ฟีเจอร์ที่ใช้ยอดขายในอดีตต้องย้อนอย่างน้อย 7 วัน (เท่ากับ horizon)** lag ใช้ 7/14/28 และ rolling ต้องคำนวณหลัง `shift(7)` เสมอ ห้ามใช้ `shift(1)` เพราะวัน t+7 จะเห็นยอดที่ยังไม่เกิด (data leakage)
+
+## 2.1 การจัดการข้อมูล (ตกลงแล้ว)
+- **ร้านที่ไม่มีข้อมูลครึ่งหลังปี 2014 (~180 ร้าน):** เก็บไว้ ถ้า lag/rolling ไม่มีค่า ให้ใช้ค่าเฉลี่ยยอดขายของร้านนั้นตามวันในสัปดาห์ (คำนวณจาก train เท่านั้น) แทน
+- **`StateHoliday`:** อ่านเป็น string เสมอ ค่าที่ถูกต้องคือ `"0"`, `"a"`, `"b"`, `"c"`
 
 ## 3. สแตก
 | หน้าที่ | เครื่องมือ | ตำแหน่งในโค้ด |
@@ -55,14 +60,19 @@ make drift        # จำลอง data drift / concept drift แล้วร�
 make rollback     # ย้าย @champion กลับไปเวอร์ชันก่อนหน้า
 docker compose up --build   # รันทั้งระบบจากเครื่องเปล่า
 ```
+- **Docker เป็นทางหลัก** เพราะสมาชิกใช้ทั้ง Windows, Mac และ Linux ทุกขั้นตอนต้องรันผ่าน `docker compose` ได้
+- คำสั่ง `make` ใช้สะดวกบน Mac/Linux แต่ทุกงานต้องรันได้บน Windows ด้วย เช่น `python -m demand.xxx` สคริปต์ใหม่ให้เขียนเป็น Python แทน bash
+- ที่อยู่ MLflow อ่านจาก env `MLFLOW_TRACKING_URI` ก่อน ถ้าไม่มีจึงใช้ค่าใน `config.yaml`
 
 ## 5. Metrics, Gating และ SLO
-- **Optimizing metric:** WAPE = Σ|y−ŷ| / Σy (วัดเฉพาะวันที่ร้านเปิด)
+- **Optimizing metric:** WAPE = Σ|y−ŷ| / Σy วัดเฉพาะแถวที่ `Open == 1` **และ** `Sales > 0` (วันที่เปิดแต่ยอดเป็น 0 ไม่นับ)
 - **Gating metric:** โมเดลจะได้เป็น `@champion` เมื่อผ่าน**ทุกข้อ**
   - WAPE ดีกว่า seasonal naive (ยอดวันเดียวกันสัปดาห์ก่อน) อย่างน้อย 10%
-  - WAPE ไม่แย่กว่า champion ปัจจุบัน
+  - WAPE ไม่แย่กว่า champion ปัจจุบัน โดย**ประเมิน champion ใหม่บน test set เดียวกัน** (ถ้ายังไม่มี champion ถือว่าผ่านข้อนี้)
   - |Bias| ≤ 5%
-  - API p95 latency < 200 ms และขนาดโมเดล < 50 MB
+  - p95 latency < 200 ms และขนาดโมเดล < 50 MB
+    - ใน gate วัดเวลาพยากรณ์ของโมเดลแบบ offline (เรียกทีละ request หลายครั้งแล้วดู p95)
+    - แล้วยืนยันกับ API จริงด้วย Locust (`make loadtest`) บันทึกผลลง `docs/slo.md`
 - **ตัวชี้วัดทางธุรกิจ:** อัตราสินค้าขาดสต็อก (พยากรณ์ต่ำเกิน) และมูลค่าสต็อกส่วนเกิน (พยากรณ์สูงเกิน)
 - **SLO:**
   - Batch forecast ทุกคืนต้องเสร็จก่อน 06:00
@@ -72,8 +82,12 @@ docker compose up --build   # รันทั้งระบบจากเค�
 1. **Batch ทุกคืน:** พยากรณ์ทุกร้านล่วงหน้า 7 วัน เขียนลง `data/predictions/`
 2. **Real-time API (what-if):** `POST /predict` เช่น "ถ้าพรุ่งนี้จัดโปรโมชัน ยอดจะเป็นเท่าไหร่"
 3. **Cascade:** ถ้า `Open == 0` ตอบ 0 ทันทีโดยไม่เรียกโมเดล
-- Endpoint: `/predict`, `/health`, `/metrics` (Prometheus), `/model-info`
+- Endpoint: `/predict`, `/health`, `/metrics` (Prometheus), `/model-info`, `POST /reload`
 - ทุก response ส่งฟีเจอร์ที่มีผลมากที่สุด 3 อันดับกลับไปด้วย (explainability)
+- **ประวัติยอดขายสำหรับ lag/rolling ตอน serve:** ตอนเทรนให้บันทึกไฟล์ประวัติยอดขายล่าสุดของแต่ละร้าน (อย่างน้อย 28 วันบวก horizon) เป็น artifact คู่กับโมเดลใน MLflow แล้ว API โหลดไฟล์นี้มาพร้อมโมเดล ผู้เรียก API ไม่ต้องส่งประวัติมา
+  - การสร้างฟีเจอร์ใช้ฟังก์ชันเดียวกันใน `src/demand/features/` ทั้งตอน train และ serve โดยรับข้อมูลแถวที่จะพยากรณ์ + ประวัติยอดขาย
+- **การเปลี่ยนโมเดล:** หลังย้าย `@champion` หรือ rollback ให้เรียก `POST /reload` เพื่อให้ API โหลดโมเดลใหม่โดยไม่ต้อง restart container
+- ถ้ายังไม่มี `@champion` (เช่นเปิดระบบครั้งแรก) API ต้องไม่ล่ม `/health` ตอบว่ายังไม่พร้อม และ `/predict` ตอบ 503 พร้อมข้อความ
 
 ## 7. Monitoring และนโยบายเทรนใหม่
 | ประเภท | ตรวจอะไร | เกณฑ์แจ้งเตือน |
@@ -118,15 +132,18 @@ loadtest/           Locust
 monitoring/         prometheus.yml, grafana dashboards
 docker/             Dockerfiles
 docs/               AI Canvas, architecture, SLO, experiments, report, ai_usage, evidence
+docs/reports/       รายงานหลังจบแต่ละขั้นตอน (ดูข้อ 14.2)
 notebooks/          สำรวจข้อมูลเท่านั้น ห้ามมีโค้ดที่ pipeline ใช้
 ```
 
 ## 11. Git workflow
 - Branch: `feat/<ส่วนงาน>-<เรื่อง>`, `fix/...`, `docs/...` เช่น `feat/data-schema`
 - Commit message: `<type>(<scope>): <สรุป>` เช่น `feat(serving): add /health endpoint`
-- PR ต้องผ่าน CI และมีคนรีวิวอย่างน้อย 1 คนก่อน merge
+- PR ต้องผ่าน CI และมี**สมาชิกคนอื่น**รีวิว approve อย่างน้อย 1 คนก่อน merge (ห้าม approve PR ของตัวเอง)
 
 ## 12. แบ่งงาน
+ทีม 7 คน รับผิดชอบคนละ 1 บทบาท
+
 | บทบาท | ความรับผิดชอบ | โฟลเดอร์หลัก |
 |---|---|---|
 | A. Data | ingest, split, schema, bad samples | `src/demand/data/` |
@@ -152,3 +169,14 @@ notebooks/          สำรวจข้อมูลเท่านั้น �
 - เมื่อช่วยเขียนโค้ดส่วนไหน ให้บันทึกลง `docs/ai_usage.md` (โจทย์บังคับให้ระบุ) และอธิบายโค้ดให้สมาชิกเข้าใจทุกบรรทัด
 - ถ้าจะเพิ่มไลบรารีใหม่ ต้องเพิ่มใน `requirements.in` แล้ว compile ใหม่ และอธิบายเหตุผล
 - ห้ามใช้ `Customers` เป็นฟีเจอร์ ห้ามแบ่งข้อมูลแบบสุ่ม
+
+### 14.1 สไตล์โค้ด: เขียนแบบ Junior dev ให้ไล่อ่านง่าย
+- ทำทีละขั้น ตั้งชื่อตัวแปรยาวและบอกความหมาย เช่น `open_days_sales` ไม่ใช่ `ods`
+- ฟังก์ชันสั้น ทำอย่างเดียว ใช้ `for` loop และ `if` ธรรมดาเมื่ออ่านง่ายกว่า
+- ห้ามใช้ท่ายาก: list comprehension ซ้อนกัน, lambda ยาว, metaclass, decorator ที่เขียนเอง, method chaining ของ pandas ที่ยาวเกิน 3 ขั้น
+- ใส่ comment อธิบาย **ทำไม** ก่อนแต่ละขั้นสำคัญ
+- ยังต้องมี type hints และ docstring ภาษาอังกฤษตามข้อด้านบน
+
+### 14.2 ทำ Report ทุกครั้งหลังจบแต่ละขั้นตอน
+- ทุกครั้งที่ทำงานขั้นหนึ่งเสร็จ (เช่น ทำ schema เสร็จ, ทำ API เสร็จ) ให้เขียนรายงานสั้นเป็นภาษาไทยที่ `docs/reports/<YYYY-MM-DD>-<ขั้นตอน>.md`
+- หัวข้อในรายงาน: ทำอะไรไป, ไฟล์ที่เพิ่ม/แก้, วิธีรันและทดสอบ, ผลลัพธ์ (เช่น test ผ่านกี่ข้อ, ค่า metric), ปัญหาที่ยังค้างและขั้นต่อไป

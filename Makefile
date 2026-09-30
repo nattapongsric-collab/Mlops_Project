@@ -1,7 +1,10 @@
-.PHONY: setup data validate pipeline serve test lint loadtest drift rollback up down
+.PHONY: setup sample-data data validate pipeline serve test lint loadtest drift rollback up down
 
 setup:
-	python -m venv .venv && . .venv/bin/activate && pip install -r requirements.txt -r requirements-dev.txt
+	python -m venv .venv && . .venv/bin/activate && pip install -r requirements-dev.txt && pip install --no-deps -e .
+
+sample-data:
+	python scripts/make_sample_data.py
 
 data:
 	bash scripts/download_data.sh
@@ -19,7 +22,7 @@ test:
 	pytest -q
 
 lint:
-	ruff check src tests
+	ruff check src tests scripts
 
 loadtest:
 	locust -f loadtest/locustfile.py --headless -u 50 -r 10 -t 1m --host http://localhost:8000 --csv artifacts/loadtest
